@@ -2,20 +2,17 @@
   "version": 2,
   "builds": [
     {
-      "src": "package.json",
+      "src": "src/index.ts",
       "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/.*",
+      "dest": "src/index.ts"
     }
   ],
   "env": {
     "MONGO_URI": "@mongo_uri"
-  },
-  "commands": {
-    "build": "tsc -b"
-  },
-  "routes": [
-    {
-      "src": "/.*",
-      "dest": "/src/index.ts"
-    }
-  ]
+  }
 }
