@@ -1,0 +1,7 @@
+{
+  "root": [
+    "./src/index.ts",
+    "./src/schemas/siteschema.ts"
+  ],
+  "version": "5.7.2"
+}
