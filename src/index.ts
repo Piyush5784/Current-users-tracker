@@ -1,18 +1,40 @@
+<<<<<<< HEAD
 import { WebSocket, WebSocketServer } from "ws";
 
 const ws = new WebSocketServer({ port: 8080 });
+=======
+import mongoose from "mongoose";
+import { WebSocket, WebSocketServer } from "ws";
+import { SiteModel } from "./Schemas/SiteSchema";
+require("dotenv").config();
+const port = 8080;
+
+const ws = new WebSocketServer({ port });
+>>>>>>> 81bf4d1f0d1ae5f265cb5f974e3c18fba6a5e80e
 
 class site {
   public id: string;
   public name: string;
+<<<<<<< HEAD
   public admin: WebSocket | null;
   public clients: Set<WebSocket>;
 
   constructor(id: string, name: string, admin: WebSocket) {
+=======
+  public url: string;
+  public admin: WebSocket | null;
+  public clients: Set<WebSocket>;
+
+  constructor(id: string, name: string, admin: WebSocket | null) {
+>>>>>>> 81bf4d1f0d1ae5f265cb5f974e3c18fba6a5e80e
     this.id = id;
     this.name = name;
     this.clients = new Set();
     this.admin = admin;
+<<<<<<< HEAD
+=======
+    this.url = "";
+>>>>>>> 81bf4d1f0d1ae5f265cb5f974e3c18fba6a5e80e
   }
 
   public registerAdmin(admin: WebSocket) {
@@ -56,9 +78,23 @@ class WebSocketServerManager {
     this.sites = new Map();
   }
 
+<<<<<<< HEAD
   public registerSite(id: string, name: string, socket: WebSocket) {
     if (!this.sites.has(id)) {
       this.sites.set(id, new site(id, name, socket));
+=======
+  public async loadSites() {
+    const admins = await SiteModel.find({});
+    admins.forEach((admin) => {
+      this.sites.set(admin.id, new site(admin.id, admin.name, null));
+    });
+  }
+
+  public registerSite(id: string, name: string, socket: WebSocket) {
+    if (!this.sites.has(id)) {
+      this.sites.set(id, new site(id, name, socket));
+      SiteModel.create({ id, name });
+>>>>>>> 81bf4d1f0d1ae5f265cb5f974e3c18fba6a5e80e
       return;
     }
   }
@@ -85,6 +121,11 @@ class WebSocketServerManager {
 }
 
 const manager = new WebSocketServerManager();
+<<<<<<< HEAD
+=======
+manager.loadSites();
+
+>>>>>>> 81bf4d1f0d1ae5f265cb5f974e3c18fba6a5e80e
 ws.on("connection", (socket, req) => {
   const queryString = new URLSearchParams(
     new URL(req.url ?? "", "ws://localhost").search
@@ -142,3 +183,13 @@ function broadcastClientUpdate(socket: WebSocket, id: string) {
     socket.send(JSON.stringify({ type: "get-sites", totalUsers: clients }));
   }
 }
+<<<<<<< HEAD
+=======
+
+async function StartServer() {
+  await mongoose.connect(process.env.MONGO_URI ?? "");
+  console.log("Mongodb connected and Server started on " + port);
+}
+
+StartServer();
+>>>>>>> 81bf4d1f0d1ae5f265cb5f974e3c18fba6a5e80e
