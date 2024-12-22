@@ -1,6 +1,29 @@
 import mongoose from "mongoose";
 import { WebSocket, WebSocketServer } from "ws";
-import { SiteModel } from "./Schemas/SiteSchema";
+import { model, Schema } from "mongoose";
+
+const siteSchema = new Schema({
+  id: {
+    type: String,
+    required: true,
+    unique: true,
+  },
+  name: {
+    type: String,
+    required: true,
+  },
+  description: {
+    type: String,
+    optional: true,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+export const SiteModel = model("Site", siteSchema);
+
 require("dotenv").config();
 const port = 8080;
 
@@ -160,8 +183,12 @@ function broadcastClientUpdate(socket: WebSocket, id: string) {
 }
 
 async function StartServer() {
-  await mongoose.connect(process.env.MONGO_URI ?? "");
-  console.log("Mongodb connected and Server started on " + port);
+  try {
+    await mongoose.connect(process.env.MONGO_URI ?? "");
+    console.log("Mongodb connected and Server started on " + port);
+  } catch (error) {
+    console.log("Error connecting to mongodb" + error);
+  }
 }
 
 StartServer();
