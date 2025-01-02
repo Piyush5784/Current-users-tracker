@@ -1,194 +1,155 @@
+import { WebSocketServer, WebSocket } from "ws";
+import { v4 as uuidv4 } from "uuid";
 import mongoose from "mongoose";
-import { WebSocket, WebSocketServer } from "ws";
-import { model, Schema } from "mongoose";
+import user from "./models/user";
 
-const siteSchema = new Schema({
-  id: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  name: {
-    type: String,
-    required: true,
-  },
-  description: {
-    type: String,
-    optional: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
-
-export const SiteModel = model("Site", siteSchema);
-
-require("dotenv").config();
-const port = 8080;
-
-const ws = new WebSocketServer({ port });
+const wss = new WebSocketServer({ port: 8080 });
 
 class site {
+  public count: number = 0;
+  public socket: WebSocket;
   public id: string;
-  public name: string;
-  public url: string;
-  public admin: WebSocket | null;
-  public clients: Set<WebSocket>;
 
-  constructor(id: string, name: string, admin: WebSocket | null) {
+  constructor(socket: WebSocket, id: string) {
+    this.count = 0;
+    this.socket = socket;
     this.id = id;
-    this.name = name;
-    this.clients = new Set();
-    this.admin = admin;
-    this.url = "";
   }
 
-  public registerAdmin(admin: WebSocket) {
-    this.admin = admin;
+  increaseCount() {
+    return this.count++;
   }
 
-  public addClient(client: WebSocket) {
-    this.clients.add(client);
-    this.notifyclients();
+  getCount() {
+    return this.count;
   }
 
-  public removeClient(client: WebSocket) {
-    this.clients.delete(client);
-    this.notifyclients();
-  }
-
-  public returnClients() {
-    return this.clients.size;
-  }
-
-  private notifyclients() {
-    const totalUsers = this.clients.size;
-    this.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: "get-sites", totalUsers }));
-      }
-    });
-
-    if (this.admin && this.admin.readyState === WebSocket.OPEN) {
-      this.admin.send(
-        JSON.stringify({ type: "get-sites", totalUsers: this.clients.size })
-      );
-    }
+  decreaseCount() {
+    return this.count--;
   }
 }
 
 class WebSocketServerManager {
-  public sites: Map<string, site>;
+  public sites: site[];
 
   constructor() {
-    this.sites = new Map();
+    this.sites = [];
   }
 
-  public async loadSites() {
-    const admins = await SiteModel.find({});
-    admins.forEach((admin) => {
-      this.sites.set(admin.id, new site(admin.id, admin.name, null));
-    });
+  add(socket: WebSocket, id: string) {
+    const newSite = new site(socket, id);
+    this.sites.push(newSite);
   }
 
-  public registerSite(id: string, name: string, socket: WebSocket) {
-    if (!this.sites.has(id)) {
-      this.sites.set(id, new site(id, name, socket));
-      SiteModel.create({ id, name });
-      return;
-    }
+  remove(socket: WebSocket) {
+    this.sites = this.sites.filter((site) => site.socket !== socket);
   }
 
-  public addClient(socket: WebSocket, id: string) {
-    const site = this.sites.get(id);
+  addIncreaseCount(socket: WebSocket, id: string) {
+    const site = this.sites.find((site) => site.id === id);
+    console.log(site);
     if (site) {
-      site.addClient(socket);
-      return;
+      console.log("increasing count");
+      site.increaseCount();
+    }
+  }
+  descreaseCount(socket: WebSocket, id: string) {
+    const site = this.sites.find((site) => site.id === id);
+    console.log(site);
+    if (site) {
+      console.log("decreasing count");
+      site.decreaseCount();
     }
   }
 
-  public removeSite(socket: WebSocket, id: string) {
-    const siteExists = this.sites.get(id);
-    if (siteExists) {
-      siteExists.removeClient(socket);
-      return;
-    }
-  }
-
-  public returnSitesLength(id: string) {
-    return this.sites.get(id)?.returnClients() ?? 0;
+  getCount(socket: WebSocket) {
+    return this.sites.length;
+    // const site = this.sites.find((site) => site.socket === socket);
+    // if (site) {
+    //   return site.getCount();
+    // } else {
+    //   return 0;
+    // }
   }
 }
 
 const manager = new WebSocketServerManager();
-manager.loadSites();
 
-ws.on("connection", (socket, req) => {
-  const queryString = new URLSearchParams(
-    new URL(req.url ?? "", "ws://localhost").search
-  );
-  const id = queryString.get("id");
-  let message = "";
+async function createUser(siteName: string, id: string) {
+  const newUser = new user({
+    siteName,
+    id,
+  });
 
-  if (!id || id.trim() === "") {
-    socket.send(JSON.stringify({ message: "Invalid id provided" }));
-    socket.close();
-    return;
-  } else {
-    console.log(`New client connected with id: ${id}`);
-    manager.addClient(socket, id);
-    broadcastClientUpdate(socket, id);
-    socket.send(JSON.stringify({ message: "Connected to server" }));
-  }
-  socket.on("message", (data) => {
+  await newUser.save();
+
+  console.log("User created");
+
+  return;
+}
+
+wss.on("connection", (ws) => {
+  const interval = setInterval(() => {
+    const count = manager.getCount(ws);
+    ws.send(
+      JSON.stringify({
+        message: `Count received `,
+        totalUsers: `${count}`,
+        type: "users",
+      })
+    );
+  }, 2000);
+
+  ws.on("message", (data) => {
     let message;
     try {
       message = JSON.parse(data.toString());
-      broadcastClientUpdate(socket, id);
     } catch (error) {
-      console.log(error);
-      socket.send(JSON.stringify({ messsage: "Error parsing message" }));
+      console.log("Invalid data format");
+      ws.send("Invalid data format");
       return;
     }
 
     switch (message.type) {
-      case "register-admin":
-        console.log("Admin registering site");
-        manager.registerSite(id, message?.name, socket);
-        socket.send(JSON.stringify({ message: "Admin site registered" }));
+      case "register":
+        (async () => {
+          const id = uuidv4();
+          manager.add(ws, id);
+          await createUser("SiteName" + id, id);
+          ws.send(JSON.stringify({ message: "Someone registered" }));
+        })();
         break;
-      case "get-sites":
-        console.log("get-users called");
-        const sites = manager.returnSitesLength(id);
-        socket.send(JSON.stringify({ sites, type: "users" }));
+      case "increase-user":
+        if (message.id) {
+          manager.addIncreaseCount(ws, message.id);
+          ws.send(JSON.stringify({ message: "User increased" }));
+        } else {
+          ws.send(JSON.stringify({ message: "Invalid id" }));
+        }
+        break;
+      case "decrease-user":
+        if (message.id) {
+          manager.addIncreaseCount(ws, message.id);
+          ws.send(JSON.stringify({ message: "User increased" }));
+        } else {
+          ws.send(JSON.stringify({ message: "Invalid id" }));
+        }
         break;
       default:
-        socket.send(JSON.stringify({ message: "Invalid message type" }));
-        break;
+        ws.send(JSON.stringify({ message: "Invalid message type" }));
     }
   });
 
-  socket.on("close", () => {
-    manager.removeSite(socket, id);
-    console.log("Client disconnected");
+  ws.on("close", (socket: WebSocket) => {
+    manager.remove(socket);
+    clearInterval(interval);
+    ws.send("closed");
   });
 });
 
-function broadcastClientUpdate(socket: WebSocket, id: string) {
-  const clients = manager.returnSitesLength(id);
-  if (socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: "get-sites", totalUsers: clients }));
-  }
+async function connectDB() {
+  await mongoose.connect("mongodb://localhost:27017/test");
+  console.log("Connected to db");
 }
 
-async function StartServer() {
-  try {
-    await mongoose.connect(process.env.MONGO_URI ?? "");
-    console.log("Mongodb connected and Server started on " + port);
-  } catch (error) {
-    console.log("Error connecting to mongodb" + error);
-  }
-}
-
-StartServer();
+connectDB();
